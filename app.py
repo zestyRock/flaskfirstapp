@@ -1,10 +1,58 @@
-import sqlite3
+import json
+from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash
 from werkzeug.exceptions import abort
-
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'emmaguo'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://root:gy198912@localhost/smartcontent_local'
+db = SQLAlchemy(app)
+
+class Post(db.Model):
+    __tablename__ = 'post'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(64), unique=False)
+    content = db.Column(db.String(128), unique=False)
+    score = db.Column(db.Integer)
+    last_published_platform = db.Column(db.String(200))
+  
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    last_published_time = db.Column(db.DateTime)
+
+    tags = db.relationship('Tag', secondary='post_tags')
+    platforms = db.relationship('Platform', secondary='platform_tags')
+    
+    def __repr__(self):
+        return '<Post %r>' % self.title
+
+class Platform(db.Model):
+    __tablename__ = 'platform';
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+    
+    def __repr__(self):
+        return '<Tag %r>' % self.name
+
+class Tag(db.Model):
+    __tablename__ = 'tag';
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+    posts = db.relationship('Post', secondary='post_tags')
+
+    def __repr__(self):
+        return '<Tag %r>' % self.name
+
+class PostPlatform(db.Model):
+    __tablename__ = 'post_platforms'
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), primary_key=True)
+    platform_id = db.Column(db.Integer, db.ForeignKey('platform.id'), primary_key=True)
+
+class PostTag(db.Model):
+    __tablename__ = 'post_tags'
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), primary_key=True)
+    tag_id = db.Column(db.Integer, db.ForeignKey('tag.id'), primary_key=True)
+    # post = db.relationship(Post, backref=db.backref("post", cascade="all, delete-orphan"))
+    # tag = db.relationship(Tag, backref=db.backref("tag", cascade="all, delete-orphan"))
 
 
 def get_db_connection():
@@ -28,7 +76,9 @@ def index():
     conn = get_db_connection()
     posts = conn.execute('SELECT * FROM posts').fetchall()
     conn.close()
+    post_dict = json.dumps( [dict(p) for p in posts] ) 
     return render_template('index.html', posts=posts)
+    # return jsonify(post_dict)
 
 @app.route('/create', methods=('GET', 'POST'))
 def create():
@@ -72,7 +122,6 @@ def edit(post_id):
             conn.commit()
             conn.close()
             return redirect(url_for('index'))
-
     return render_template('edit.html', post=post)
 
 
